@@ -1,0 +1,25 @@
+Initial setup:
+Convert the list into logical vars.
+
+Iterate through the matrix row by row generating slots.
+Iterate through the matrix column by column, transposing it to a horizontal format, generating slots.
+
+Each step:
+
+Sort words by the frequency of their length. So if there is only 1 word left 
+with 5 letters, do that one first. If there are multiple words with the same
+frequency, sort the longest towards the front.
+E.g. hello, hey, dog, dogs, cat, logs, maths -> hello, maths, dogs, logs, hey, dog, cat
+
+Do a pass through the words, looking for an instance where there is
+a direct line up. Meaning, find instances where there is only one slot of
+length 6 and one word of length 6, meaning they must match up.
+i.e. for each word, check if there is a single slot of that word's length.
+
+Each pass try the previous step. If that doesn't work out however, try to match
+the word at the head of the list, because it is the least frequently occuring
+length of word, meaning that the search space is smallest of the remaining
+permutations.
+
+Wouldn't it be best to continue on from where you just placed a word?
+
