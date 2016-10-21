@@ -101,6 +101,32 @@ gsfr([E|Es], AccSlots, AccCurr, Slots) :-
     % decided in a choicepoint, we can get nice tail recursion.
     gsfr(Es, AccSlotsNew, AccCurrNew, Slots).
 
+% Takes a puzzle that has been filled with logical variables.
+get_slots_one_orientation(FilledPuzzle, Slots) :-
+    ghs(FilledPuzzle, [], Slots).
+% Base case. No rows left so set Slots to the accumulator.
+gsoo([], Acc, Acc).
+gsoo([R:Rs], Acc, Slots) :-
+    get_slots_from_row(R, RSlots),
+    % If this row had no slots, RSlots will be [], in which case the call
+    % to append won't change Acc (NewAcc will be the same as Acc).
+    append(Acc, RSlots, NewAcc),
+    gsoo(Rs, NewAcc, Slots).
+
+
+get_slots(FilledPuzzle, Slots) :-
+    get_slots_one_orientation(FilledPuzzle, HSlots),
+    transpose(FilledPuzzle, VerticalPuzzle),
+    get_slots_one_orientation(VerticalPuzzle, VSlots),
+    append(HSlots, VSlots, Slots).
+
+
+% Takes the main list of slots and the new list of slots and puts them together.
+% Can't just append the new list to the current list can we?
+% Maybe we can... put this predicate on hold.
+% flatten_into_slots()
+
+
 fill_puzzle_with_vars(Puzzle, FilledPuzzle) :-
     % The accumulator will be for each row in the puzzle.
     fpwv(Puzzle, [], FilledPuzzle).
@@ -137,7 +163,20 @@ frwv([S|Ss], Acc, FilledRow) :-
     append(Acc, S, NewAcc)
 ),  frvw(Ss, NewAcc, FilledRow).
 
+% solve_puzzle(Puzzle0, WordList, Puzzle)
+% should hold when Puzzle is a solved version of Puzzle0, with the
+% empty slots filled in with words from WordList.  Puzzle0 and Puzzle
+% should be lists of lists of characters (single-character atoms), one
+% list per puzzle row.  WordList is also a list of lists of
+% characters, one list per word.
+%
+% This code is obviously wrong: it just gives back the unfilled puzzle
+% as result.  You'll need to replace this with a working
+% implementation.
 
+solve_puzzle(Puzzle, _, Puzzle) :-
+    fill_puzzle_with_vars(Puzzle, FilledPuzzle),
+    get_slots(FilledPuzzle, Slots).
 
 % Break up puzzle into rows like this:
 % [R|Rs]
@@ -166,18 +205,6 @@ samelength([_|L1], [_|L2]) :-
     same_length(L1, L2).
 
 
-% solve_puzzle(Puzzle0, WordList, Puzzle)
-% should hold when Puzzle is a solved version of Puzzle0, with the
-% empty slots filled in with words from WordList.  Puzzle0 and Puzzle
-% should be lists of lists of characters (single-character atoms), one
-% list per puzzle row.  WordList is also a list of lists of
-% characters, one list per word.
-%
-% This code is obviously wrong: it just gives back the unfilled puzzle
-% as result.  You'll need to replace this with a working
-% implementation.
-
-solve_puzzle(Puzzle, _, Puzzle).
 
 /*
 get_slots(Puzzle, Slots) :-
