@@ -27,6 +27,7 @@
 ** Solves the Puzzle for Wordlist into Solved
 ** Prints the solved puzzle out to SolutionFile
 */
+/*
 main(PuzzleFile, WordlistFile, SolutionFile) :-
     % Read in Puzzle and Wordlist.
     % We throw away puzzle after checking for validity and read it in again
@@ -38,6 +39,16 @@ main(PuzzleFile, WordlistFile, SolutionFile) :-
     !, % Makes the previous stuff final.
     read_puzzle(PuzzleFile, Puzzle),
 
+    solve_puzzle(Puzzle, Wordlist, Solved).
+    %print_puzzle(SolutionFile, Solved).
+*/
+
+main(PuzzleFile, WordlistFile, SolutionFile) :-
+    % Read in Puzzle and Wordlist.
+    read_generic(PuzzleFile, Puzzle),
+    read_generic(WordlistFile, Wordlist),
+    valid_puzzle(Puzzle),
+    !, % Makes the previous stuff final.
     solve_puzzle(Puzzle, Wordlist, Solved).
     %print_puzzle(SolutionFile, Solved).
 
@@ -78,7 +89,7 @@ gsfr([], Acc, [], Acc).
 gsfr([], AccSlots, AccCurr, Slots) :-
     length(AccCurr, Len),
 (   Len > 2
-->  append(AccSlots, AccCurr, AccSlotsNew)
+->  append(AccSlots, [AccCurr], AccSlotsNew)
 ;   AccSlotsNew = AccSlots
 ),  % Now that we've dealt with the dangling slot, call again with AccCurr = []
     gsfr([], AccSlotsNew, [], Slots).
@@ -94,7 +105,8 @@ gsfr([E|Es], AccSlots, AccCurr, Slots) :-
     ),
     AccCurrNew = []
 ;   % E isn't #, so keep building the current slot AccCurr.
-    append(AccCurr, E, AccCurrNew)
+    append(AccCurr, [E], AccCurrNew),
+    AccSlotsNew = AccSlots
 ),  % If E was #, AccCurrNew will be empty [].
     % By building the AccSlotsNew and AccCurrNew args beforehand instead of
     % calling the predicates with the new args immediately after they're
@@ -103,10 +115,12 @@ gsfr([E|Es], AccSlots, AccCurr, Slots) :-
 
 % Takes a puzzle that has been filled with logical variables.
 get_slots_one_orientation(FilledPuzzle, Slots) :-
-    ghs(FilledPuzzle, [], Slots).
+    gsoo(FilledPuzzle, [], Slots).
 % Base case. No rows left so set Slots to the accumulator.
 gsoo([], Acc, Acc).
-gsoo([R:Rs], Acc, Slots) :-
+% Spent ages looking for a bug which prolog helped 0% with where I was doing
+% this [R:Rs] instead of this [R|Rs]. Kill me.
+gsoo([R|Rs], Acc, Slots) :-
     get_slots_from_row(R, RSlots),
     % If this row had no slots, RSlots will be [], in which case the call
     % to append won't change Acc (NewAcc will be the same as Acc).
@@ -136,10 +150,11 @@ fpwv([], Acc, Acc).
 % puzzle).
 fpwv([R|Rs], Acc, FilledPuzzle) :-
     fill_row_with_vars(R, NewR),
-    append(Acc, NewR, NewAcc),
-    fpvw(Rs, NewAcc, FilledPuzzle).
+    append(Acc, [NewR], NewAcc),
+    fpwv(Rs, NewAcc, FilledPuzzle).
 
 
+% UPDATE: This is obselete now. Can just use _ to make a free var.
 % This magical little snippet creates a free variable:
 create_free_var(A) :-
     length(A,1).
@@ -156,12 +171,13 @@ frwv([], Acc, Acc).
 frwv([S|Ss], Acc, FilledRow) :-
 (   % If we get an underscore, replace it with a free var.
     S = '_'
-->  create_free_var(A),
-    % NewAcc has the free variable A in it.
-    append(Acc, slot(A), NewAcc)
-;   % Otherwise, just leave the current value (# or letter).
-    append(Acc, S, NewAcc)
-),  frvw(Ss, NewAcc, FilledRow).
+->  %create_free_var(A),
+    NewFree = slot(_),
+    % NewAcc has the free variable slot(_) in it.
+    append(Acc, [NewFree], NewAcc)
+;   % Otherwise, just leave the current value (# or letter). In a list ofc.
+    append(Acc, [S], NewAcc)
+),  frwv(Ss, NewAcc, FilledRow).
 
 % solve_puzzle(Puzzle0, WordList, Puzzle)
 % should hold when Puzzle is a solved version of Puzzle0, with the
