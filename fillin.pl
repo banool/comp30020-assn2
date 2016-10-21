@@ -26,7 +26,7 @@ main(PuzzleFile, WordlistFile, SolutionFile) :-
 	read_generic(PuzzleFile, PuzzleVerificationTest),
 	read_generic(WordlistFile, Wordlist),
 	valid_puzzle(PuzzleVerificationTest),
-
+	!, % Makes the previous stuff final.
 	read_puzzle(PuzzleFile, Puzzle),
 
 	solve_puzzle(Puzzle, Wordlist, Solved).
@@ -51,6 +51,45 @@ next_char(Curr, Next) :-
     string_codes(Code,Next).
 */
 
+
+% This magical little snippet creates a free variable:
+create_free_var(A) :-
+    length(A,1).
+% Use like:
+% create_free_var(A),
+% append(blah, A, blah).
+
+fill_puzzle_with_vars(Puzzle, FilledPuzzle) :-
+	fpwv(Puzzle, [], FilledPuzzle).
+% Base case, hit the end of the puzzle. Set FilledPuzzle to the accumulator.
+fpwv([], Acc, Acc).
+% [Row|RemainingRows], Acc (set to [] at the start), FilledPuzzle (returned 
+% puzzle).
+fpwv([R|Rs], Acc, FilledPuzzle) :-
+	fill_row_with_vars(R, NewR),
+	append(Acc, NewR, NewAcc),
+	fpvw(Rs, NewAcc, FilledPuzzle).
+
+
+% The accumulator will be for each item in the row.
+fill_row_with_vars(Row, FilledRow) :-
+	frwv(Row, [], FilledRow).
+% Base case, hit the end of the row. Set FilledRow to the accumulator.
+frwv([], Acc, Acc).
+% [Slot|RemainingSlots], Acc (set to [] at the start), FilledRow (returned row).
+frwv([S|Ss], Acc, FilledRow) :-
+(	% If we get an underscore, replace it with a free var.
+	S = '_'
+->	create_free_var(A),
+	% NewAcc has the free variable A in it.
+	append(Acc, A, NewAcc)
+;	% Otherwise, just leave the current value (# or letter).
+	append(Acc, S, NewAcc)
+),	frvw(Ss, NewAcc, FilledRow).
+
+
+% Break up puzzle into rows like this:
+% [R|Rs]
 
 print_puzzle(SolutionFile, Puzzle) :-
 	open(SolutionFile, write, Stream),

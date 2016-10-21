@@ -1,0 +1,14 @@
+fill_slots_H
+    newpuzzle = []
+    slots = []
+    for each row in puzzle:
+        make a new row with logical vars DONE
+        add new row to newpuzzle DONE
+        SEPARATE THIS STEP INTO ANOTHER PASS FOR UNDERSTANDABILITY'S SAKE
+        get all the slots from this row
+        add these slots to slots (this might make lists of lists, perhaps leave it like that and flatten once done).
+flip
+fill_slots_V
+    for each column:
+        get all the slots
+        you don't need to make them with logical vars because they already have them.
