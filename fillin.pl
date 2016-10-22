@@ -18,6 +18,7 @@
 */
 
 :- ensure_loaded(library(clpfd)).
+:- use_module(library(pairs)).
 :- use_module(puzzle_reader).
 :- use_module(generic_reader).
 :- use_module(wordlist_reader).
@@ -243,6 +244,34 @@ solve_puzzle(Puzzle, WordList, PuzzleSolved) :-
     fill_puzzle_with_vars(Puzzle, FilledPuzzle),
     get_slots(FilledPuzzle, Slots),
     get_slot_words_pairs(Slots, WordList, Pairs).
+
+% This predicate does two things:
+% 1. Remove an instance of the word we've just put into a slot from all the
+%    remaining triples.
+% 2. Check that the remaining words would still unify successfully with the
+%    slot. If they don't, remove them.
+clean_up_pairs(Word, Pairs, NewPairs) :-
+	cup(Word, Pairs, [], NewPairs).
+cup(_, [], Acc, Acc).
+cup(Word, [[Slot|Words]|Ps], Acc, NewPairs) :-
+% Instead of checking whether this returns false, it would really be better to
+% just have the delete_single_element predicate return the original list if the
+% element isn't found. This would avoid the choicepoint here.
+(	delete_single_element(Word, Words, NewWords)
+->	_ = _ % Do nothing
+;	NewWords = Words
+),	NewPair = pair(Slot, NewWords),
+	append(Acc, [NewPair], NewAcc),
+	cup(Word, Ps, NewAcc, NewPairs).
+
+% Returns false if nothing changed.
+delete_single_element(_, [], []).
+delete_single_element(Element, [Element|Es], Es) :- !.
+% Where Element and E are not equal.
+delete_single_element(Element, [E|Es], [E|Result]) :-
+	delete_single_element(Element, Es, Result).
+	
+
 
 % Break up puzzle into rows like this:
 % [R|Rs]
