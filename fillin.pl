@@ -213,16 +213,15 @@ gswp([S|Ss], WordList, Acc, Pairs) :-
 	%member(W, WordList),
 	%bagof(WordList, W=S, FittingWords).
 	get_words_for_slot(S, WordList, Words),
-	append(Acc, pair(S, Words), NewAcc),
+	append(Acc, [pair(S, Words)], NewAcc),
 	gswp(Ss, WordList, NewAcc, Pairs).
 
 get_words_for_slot(Slot, WordList, Words) :-
 	gwfs(Slot, WordList, [], Words).
 gwfs(_, [], Acc, Acc).
 gwfs(Slot, [W|Ws], Acc, Words) :-
-	% Checks if they can be unified without actually doing it.
-	not(not(Test = Slot)),
-(	Test = W
+(	% Checks if they can be unified without actually doing it.
+	not(not(Slot = W))
 ->	append(Acc, [W], NewAcc)
 ;	NewAcc = Acc
 ),	gwfs(Slot, Ws, NewAcc, Words).
