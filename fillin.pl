@@ -52,9 +52,9 @@ main(PuzzleFile, WordListFile, SolutionFile) :-
     %maplist(slot/1, WordListRaw, WordList),
     %into_slots_wordlist(WordListRaw, WordList),
     valid_puzzle(Puzzle),
-    !, % Makes the previous stuff final.
-    solve_puzzle(Puzzle, WordList, Solved).
-    %print_puzzle(SolutionFile, Solved).
+    % !, % Makes the previous stuff final.
+    solve_puzzle(Puzzle, WordList, Solved),
+    print_puzzle(SolutionFile, Solved).
 
 
 %into_slots_wordlist(WordListRaw, WordList) :-
@@ -203,7 +203,11 @@ fill_words.
 % 4. Once you get a successful fit, go through all the pairs and remove all 
 %    instances of this word (unless there are two of that word in the wordlist, 
 %    deal with this edge case). Can't use the same word twice.
-% 5. After this successful fit and removal of the word, re-sort the pairs.
+% 5. While there, for each slot check that the words for that slot can still
+%    unify with the slot. If not, remove them.
+% 6. After this successful fit and removal of the word, re-sort the pairs.
+%    Use insertion sort because, except for the first time, the list will be
+%    mostly sorted, meaning close to O(n) time.
 
 get_slot_words_pairs(Slots, WordList, Pairs) :-
 	% acc for all pairs, acc for currently in construction pair
@@ -243,35 +247,135 @@ gwfs(Slot, [W|Ws], Acc, Words) :-
 solve_puzzle(Puzzle, WordList, PuzzleSolved) :-
     fill_puzzle_with_vars(Puzzle, FilledPuzzle),
     get_slots(FilledPuzzle, Slots),
-    get_slot_words_pairs(Slots, WordList, Pairs).
+    get_slot_words_pairs(Slots, WordList, Pairs),
+    % Call insertion_sort once beforehand.
+    % Ideally, this first sort should be quicksort.
+    insertion_sort(Pairs, SortedPairs),
+    insert_words_until_filled(SortedPairs),
+    PuzzleSolved = FilledPuzzle.
+
+% insert_words_until_filled(Pairs, WordList)
+% tfw you spend maybe an hour reading the trace and you get to the very end
+% and realise you haven't added a base case? feels bad/help.
+insert_words_until_filled([]).
+insert_words_until_filled([pair(Slot, Words)|Ps]) :-
+	first_element(Words, WordToTry),
+(	% Fill in a word. This unification shouldn't fail because the words for 
+	% each slot are checked to make sure that they can unify with said slot 
+	% after every guess.
+	Slot = WordToTry,
+	% Now that a word has been filled in, we need to clean up all the pairs.
+	% This means removing the just-guessed word as well making sure that the
+	% words for each slot would still unify with it (since a letter may have
+	% been filled in now). We get back nice pairs with unifiable words.
+	clean_up_pairs(WordToTry, Ps, CleanPairs)
+-> 	% Success, cleaned up well. This means that this slot is totally done and 
+	% we can move on. We're sure about this, so we cut right here.
+	_ = _
+;	% Cleaning up went wrong (a slot ended up with no possible words), so 
+	% we delete this word from the list of words for this slot and try again.
+	delete_single_element(WordToTry, Words, NewWords),
+	RevisedPair = pair(Slot, NewWords),
+	append([RevisedPair], Ps, CleanPairs)
+), 	% The length of the list of words for each pair may have changed, so sort
+	% the pairs again so we minimise the space for the next and future runs.
+	% Sorting of pairs is based on how many words left for each slot.
+	insertion_sort(CleanPairs, SortedPairs),
+	% Go into the next run with the remaining pairs.
+	insert_words_until_filled(SortedPairs).
+
+
+% Get the first element of a list. Useful when you don't want to do [H|Hs].
+first_element([E|Es], E).
 
 % This predicate does two things:
 % 1. Remove an instance of the word we've just put into a slot from all the
-%    remaining triples.
+%    remaining pairs.
 % 2. Check that the remaining words would still unify successfully with the
 %    slot. If they don't, remove them.
 clean_up_pairs(Word, Pairs, NewPairs) :-
 	cup(Word, Pairs, [], NewPairs).
 cup(_, [], Acc, Acc).
-cup(Word, [[Slot|Words]|Ps], Acc, NewPairs) :-
-% Instead of checking whether this returns false, it would really be better to
-% just have the delete_single_element predicate return the original list if the
-% element isn't found. This would avoid the choicepoint here.
-(	delete_single_element(Word, Words, NewWords)
-->	_ = _ % Do nothing
-;	NewWords = Words
-),	NewPair = pair(Slot, NewWords),
+cup(Word, [pair(Slot,Words)|Ps], Acc, NewPairs) :-
+	first_element(Words, CheckWord),
+	length(Word, WLen),
+	length(CheckWord, CWLen),
+	% If the length of Word is different to WordCheck, an element in the word 
+	% list, it means that the length of the slot being checked is different to
+	% the word we're trying to delete. Since the length of words will all be 
+	% the same in the word list, we can just stop checking early.
+(	WLen = CWLen
+->	(	% Instead of checking whether this returns false, it would really be 
+		% better to just have the delete_single_element predicate return the 
+		% original list if the element isn't found. This would avoid the 
+		% choicepoint here.
+		% Could check to see if Words is > 1 before doing delete_single_element
+		% for a tiny, tiny efficiency boost. 
+		delete_single_element(Word, Words, WordsMinusMatch)
+	->	_ = _ % Do nothing, the word wasn't in the list.
+	;	WordsMinusMatch = Words
+	)
+;	WordsMinusMatch = Words
+),	% Take the words (minus the matching word) and check whether they can
+	% still unify with the slot (now that a letter may have been filled in).
+	% NOTE HELLO TODO
+	% Before doing get_words_for_slot, we could check the length of 
+	% WordsMinusMatch. If it is 1, there is only one word that could possibly
+	% fit the slot, so we may as well unify them for real.
+	% Not sure how that would affect backtracking though.
+	get_words_for_slot(Slot, WordsMinusMatch, NewWords),
+	% If the length of the list of words for this new slot is 0, it is now
+	% impossible to fill this slot. This means we followed the wrong branch
+	% and have officially failed, so we kill this predicate here.
+	length(NewWords, LenNewWords),
+	LenNewWords > 0,
+	NewPair = pair(Slot, NewWords),
 	append(Acc, [NewPair], NewAcc),
 	cup(Word, Ps, NewAcc, NewPairs).
 
 % Returns false if nothing changed.
 delete_single_element(_, [], []).
-delete_single_element(Element, [Element|Es], Es) :- !.
+delete_single_element(Element, [Element|Es], Es). % Used to have a cut here.
 % Where Element and E are not equal.
 delete_single_element(Element, [E|Es], [E|Result]) :-
 	delete_single_element(Element, Es, Result).
 	
+% Does insertion sort on pairs based on the length of the words for that slot.
+% Based on http://kti.mff.cuni.cz/~bartak/prolog/sorting.html
+insertion_sort(Pairs, Sorted):-
+	i_sort(Pairs, [], Sorted).
+% Base case, hit the end of the original list.
+i_sort([], Acc, Acc).
+% Main functionality of insertion sort.
+% Iterate through the list, trying to insert each item into the new list.
+% Keep doing until you have inserted all items into the new list.
+i_sort([E|Es], Acc, Sorted):-
+	insert(E, Acc, NAcc),
+	i_sort(Es, NAcc, Sorted).
+% This gets us to the right spot in the list. 
+insert(X, [Y|T], [Y|NT]):-
+	len_pair(X, LenX),
+	len_pair(Y, LenY),
+	LenX > LenY,
+	insert(X, T, NT).
+% We found the spot!
+insert(X, [Y|T], [X,Y|T]):-
+	len_pair(X, LenX),
+	len_pair(Y, LenY),
+	LenX =< LenY.
+insert(X, [], [X]).
 
+
+% Test with this:
+% insertion_sort([pair([1,2], [[1], [2]]), pair([1,2], [[1], [2], [3]]), pair([1,2], [[1]])], X).
+
+
+
+
+% len_pair(Pair, Length)
+% Takes a Pair and returns the length of the list of words in the pair.
+len_pair(pair(Slot,Words), Length) :-
+	length(Words, Length).
 
 % Break up puzzle into rows like this:
 % [R|Rs]
@@ -285,7 +389,7 @@ print_row(Stream, Row) :-
     maplist(put_puzzle_char(Stream), Row),
     nl(Stream).
 
-put_puzzle_char(Stream, Char) :-
+put_puzzle_char(Stream, slot(Char)) :-
     (   var(Char)
     ->  put_char(Stream, '_')
     ;   put_char(Stream, Char)
