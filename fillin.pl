@@ -20,37 +20,44 @@
 :- ensure_loaded(library(clpfd)).
 :- use_module(puzzle_reader).
 :- use_module(generic_reader).
+:- use_module(wordlist_reader).
 
 /*
-** Reads the PuzzleFile and WordlistFile into Puzzle and Wordlist
+** Reads the PuzzleFile and WordListFile into Puzzle and WordList
 ** Confirms that the puzzle is valid
-** Solves the Puzzle for Wordlist into Solved
+** Solves the Puzzle for WordList into Solved
 ** Prints the solved puzzle out to SolutionFile
 */
 /*
-main(PuzzleFile, WordlistFile, SolutionFile) :-
-    % Read in Puzzle and Wordlist.
+main(PuzzleFile, WordListFile, SolutionFile) :-
+    % Read in Puzzle and WordList.
     % We throw away puzzle after checking for validity and read it in again
     % with read_puzzle, which creates logical variables wrapped in functors
     % (e.g. slot("AB") for each slot as it reads in the PuzzleFile.
     read_generic(PuzzleFile, PuzzleVerificationTest),
-    read_generic(WordlistFile, Wordlist),
+    read_generic(WordListFile, WordList),
     valid_puzzle(PuzzleVerificationTest),
     !, % Makes the previous stuff final.
     read_puzzle(PuzzleFile, Puzzle),
 
-    solve_puzzle(Puzzle, Wordlist, Solved).
+    solve_puzzle(Puzzle, WordList, Solved).
     %print_puzzle(SolutionFile, Solved).
 */
 
-main(PuzzleFile, WordlistFile, SolutionFile) :-
-    % Read in Puzzle and Wordlist.
+main(PuzzleFile, WordListFile, SolutionFile) :-
+    % Read in Puzzle and WordList.
     read_generic(PuzzleFile, Puzzle),
-    read_generic(WordlistFile, Wordlist),
+    read_wordlist(WordListFile, WordList),
+    %maplist(slot/1, WordListRaw, WordList),
+    %into_slots_wordlist(WordListRaw, WordList),
     valid_puzzle(Puzzle),
     !, % Makes the previous stuff final.
-    solve_puzzle(Puzzle, Wordlist, Solved).
+    solve_puzzle(Puzzle, WordList, Solved).
     %print_puzzle(SolutionFile, Solved).
+
+
+%into_slots_wordlist(WordListRaw, WordList) :-
+%	isw(WordListRaw, [], WordListRaw)
 
 /*
 convert_row_to_logical_vars(Row, LogicalRow) :-
@@ -70,6 +77,7 @@ next_char(Curr, Next) :-
     Code is Curr + 1,
     string_codes(Code,Next).
 */
+
 
 % Probably need two accumulators, one to hold the slots and one to hold a slot
 % as it is being built up square by square.
@@ -99,8 +107,8 @@ gsfr([], AccSlots, AccCurr, Slots) :-
 gsfr([E|Es], AccSlots, AccCurr, Slots) :-
 (   E = '#'
 ->  length(AccCurr, Len),
-    (   Len > 2
-    ->  append(AccSlots, AccCurr, AccSlotsNew)
+    (   Len >= 2
+    ->  append(AccSlots, [AccCurr], AccSlotsNew)
     ;   AccSlotsNew = AccSlots
     ),
     AccCurrNew = []
@@ -168,16 +176,58 @@ fill_row_with_vars(Row, FilledRow) :-
 % Base case, hit the end of the row. Set FilledRow to the accumulator.
 frwv([], Acc, Acc).
 % [Slot|RemainingSlots], Acc (set to [] at the start), FilledRow (returned row).
-frwv([S|Ss], Acc, FilledRow) :-
-(   % If we get an underscore, replace it with a free var.
-    S = '_'
-->  %create_free_var(A),
-    NewFree = slot(_),
-    % NewAcc has the free variable slot(_) in it.
-    append(Acc, [NewFree], NewAcc)
-;   % Otherwise, just leave the current value (# or letter). In a list ofc.
-    append(Acc, [S], NewAcc)
-),  frwv(Ss, NewAcc, FilledRow).
+frwv([E|Es], Acc, FilledRow) :-
+(   % Just append hash chars as they are and keep going.
+    E = '#'
+->  append(Acc, [E], NewAcc)
+;	(	E = '_'
+	->	% If we get an underscore, replace it with a free var.
+		% NewAcc has the free variable slot(_) in it.
+		InSlot = slot(_)
+    ;	% Otherwise, we got a letter, which we wrap in slot().
+    	InSlot = slot(E)
+    ),
+    append(Acc, [InSlot], NewAcc)    
+),  frwv(Es, NewAcc, FilledRow).
+
+
+% fill_words(Slots, WordList)
+fill_words(_, []).
+fill_words.
+% 1. For each slot, find the words that can fit in the slot.
+%    This is based on whether they actually fit: Slot = Word.
+% 2. Sort these pairs (slot, words) by the number of words that match.
+% 3. Select the slot with the least possible matches and try to bind the words.
+%    Keep trying to bind words until you get a successful fit.
+% 4. Once you get a successful fit, go through all the pairs and remove all 
+%    instances of this word (unless there are two of that word in the wordlist, 
+%    deal with this edge case). Can't use the same word twice.
+% 5. After this successful fit and removal of the word, re-sort the pairs.
+
+get_slot_words_pairs(Slots, WordList, Pairs) :-
+	% acc for all pairs, acc for currently in construction pair
+	gswp(Slots, WordList, [], Pairs).
+gswp([], _, Acc, Acc).
+gswp([S|Ss], WordList, Acc, Pairs) :-
+	% This member call will backtrack upon failure in bagof.
+	%member(W, WordList),
+	%bagof(WordList, W=S, FittingWords).
+	get_words_for_slot(S, WordList, Words),
+	append(Acc, pair(S, Words), NewAcc),
+	gswp(Ss, WordList, NewAcc, Pairs).
+
+get_words_for_slot(Slot, WordList, Words) :-
+	gwfs(Slot, WordList, [], Words).
+gwfs(_, [], Acc, Acc).
+gwfs(Slot, [W|Ws], Acc, Words) :-
+	% Checks if they can be unified without actually doing it.
+	not(not(Test = Slot)),
+(	Test = W
+->	append(Acc, [W], NewAcc)
+;	NewAcc = Acc
+),	gwfs(Slot, Ws, NewAcc, Words).
+
+
 
 % solve_puzzle(Puzzle0, WordList, Puzzle)
 % should hold when Puzzle is a solved version of Puzzle0, with the
@@ -190,9 +240,10 @@ frwv([S|Ss], Acc, FilledRow) :-
 % as result.  You'll need to replace this with a working
 % implementation.
 
-solve_puzzle(Puzzle, _, Puzzle) :-
+solve_puzzle(Puzzle, WordList, PuzzleSolved) :-
     fill_puzzle_with_vars(Puzzle, FilledPuzzle),
-    get_slots(FilledPuzzle, Slots).
+    get_slots(FilledPuzzle, Slots),
+    get_slot_words_pairs(Slots, WordList, Pairs).
 
 % Break up puzzle into rows like this:
 % [R|Rs]
