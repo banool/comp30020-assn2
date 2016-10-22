@@ -2,3 +2,4 @@
 % Not like this [X|Y], that is only for lists.
 get_args(pair(X,Y), X, Y).
 
+get_val(slot(A), A).
