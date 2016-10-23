@@ -1,12 +1,29 @@
 /* 
-** Skeleton code provided by Peter Schachte / Les Kitchen.
-** Additional code written by me:
 ** Daniel Porteous porteousd 696965
+** Project 2 COMP30020 - Declarative Programming
+** October 2016
 **
-** After opening swipl, run the program like this:
-** main("samples/puzzle1", "samples/words1", "samples/attempt1").
-** Check how you went by comparing attempt1 and filled1.
-**
+** Skeleton code provided by Peter Schachte / Les Kitchen.
+** Additional code written by me.
+*/
+
+/*
+** Brief explanation of what this project is:
+** =============================================================================
+** This is completed code for project 2 for the University of Melbourne subject
+** COMP30020 - Declarative Programming. The aim to is to write prolog code which
+** can take something called a fill-in puzzle, in its unfilled state, as well as
+** a list of words for that puzzle, and produce a completed puzzle.
+** Efficiency is important here, because as the puzzle grows the possibilities
+** for filling the slots grow vastly, making it unfeasible to brute force it.
+** The main functionality includes preparing the puzzle by filling it with
+** logical variables, finding slots in which to put words, and generating words
+** which could be the correct word for each slot. These pairs are then sorted
+** and the slot with the fewest possible words is attempted to be filled in.
+** If the algorithm gets itself into a hole where it can't fill anything in, the
+** program will backtrack until it gets to a suitable choicepoint to try again. 
+** This process continues until the puzzle is filled in. 
+
 ** Efforts are made to implement tail recursion where possible.
 ** The main way to do this is to build the arguments for the next call in the
 ** choicepoints and then having a single call at the end, instead of calling
@@ -24,8 +41,9 @@
 ** more efficient.
 */
 
-/*
+/* 
 ** A note on sorting:
+** =============================================================================
 ** Originally, sorting happened like this.
 ** The pairs would be sorted in descending order (so sorted and then reversed)
 ** based on length of the slots first. A single insertion sort would then occur
@@ -52,11 +70,14 @@
 
 /* 
 ** Terminology:
+** =============================================================================
 ** Element: A single point in the puzzle. Would use Square, but want distinct
             first letters for each thing (E for element, S for Slot).
-** Slot:    A >= 2 series of squares running horizontally or vertically.
+** Slot:    A >= 2 list of elements/squares running horizontally or vertically.
+**          These elements/squares are each wrapped in a slot() functor.
 ** Row:     A list of elements, which can be '_', '#', or a letter.
 ** Puzzle:  Entire puzzle, which is a series of rows.
+** Pair:    Slot -> [Words], indicating which words fit that slot.
 */
 
 :- ensure_loaded(library(clpfd)).
@@ -422,58 +443,68 @@ insert(X, [], [X]).
 
 /*
 ** Sorts elements in ascending order based on the number of words for a slot.
+** Really, this should be descending order, so that longer slots are at the
+** head of the list (still sorted by number of words per slot of course) but 
+** for some reason this makes it faster, further defying logic.
 ** See the note on sorting for why this is useful.
 ** Thanks to http://kti.mff.cuni.cz/~bartak/prolog/sorting.html
-** for the starting code.
+** for the inspiration.
 ** Pivot selection isn't particulary insightful here.
 */
 pivot_words_len(_, [], [], []).
+% The two predicates here essentially take the head and tail of the list and 
+% give you back the list as two halves. These halves are then given to two
+% calls to quicksort, which keeps doing this recursively until you get to single
+% items, which is the above case, in which case you've divided all the way down
+% so the list is now sorted. Obviously not in-place, and doesn't use dutch flag.
 pivot_words_len(H, [X|T], [X|L], G):- 
-    len_pair(H, Hl),
-    len_pair(X, Xl),
-    Xl >= Hl,
+    len_pair(H, LenH),
+    len_pair(X, LenX),
+    LenX >= LenH,
     pivot_words_len(H, T, L, G).
 pivot_words_len(H, [X|T], L, [X|G]):- 
-    len_pair(H, Hl),
-    len_pair(X, Xl),
-    Xl < Hl,
+    len_pair(H, LenH),
+    len_pair(X, LenX),
+    LenX < LenH,
     pivot_words_len(H, T, L, G).
 qsort_words_len(Pairs, Sorted) :- 
     q_sort_words_len(Pairs, [], Sorted).
+% Basic recursive predicate which splits does the dividing.
+% pivot_words_len does the majority of the work in actually splitting the list.
 q_sort_words_len([], Acc, Acc).
 q_sort_words_len([H|T], Acc, Sorted):-
     pivot_words_len(H, T, L1, L2),
-    % Standard divide and conquer that occurs in 
-    q_sort_words_len(L1, Acc, Sorted1),
-    q_sort_words_len(L2, [H|Sorted1], Sorted).
+    % Standard divide and conquer that occurs in quicksort.
+    q_sort_words_len(L1, Acc, SortedLeft),
+    q_sort_words_len(L2, [H|SortedLeft], Sorted).
 
 % Gets the length of the slot in a pair, pretty basic.
 len_slot(pair(Slot, _), Length) :-
     length(Slot, Length).
 
-% Sorts elements in descending order based on the length of the slots.
+% Sorts elements in ascending order based on the length of the slots.
 % This orders elements the same way as insertion_sort, but with a different alg.
 % See the note on sorting for why this is useful.
 % Thanks to http://kti.mff.cuni.cz/~bartak/prolog/sorting.html
-% for the starting code.
+% for the inspiration.
 pivot_slot_len(_, [], [], []).
 pivot_slot_len(H, [X|T], [X|L],G):- 
-    len_slot(H, Hl),
-    len_slot(X, Xl),
-    Xl >= Hl,
+    len_slot(H, LenH),
+    len_slot(X, LenX),
+    LenX >= LenH,
     pivot_slot_len(H, T, L, G).
 pivot_slot_len(H, [X|T], L, [X|G]):- 
-    len_slot(H, Hl),
-    len_slot(X, Xl),
-    Xl < Hl,
+    len_slot(H, LenH),
+    len_slot(X, LenX),
+    LenX < LenH,
     pivot_slot_len(H, T, L, G).
 qsort_slot_len(Pairs, Sorted) :- 
     q_sort_slot_len(Pairs, [], Sorted).
 q_sort_slot_len([], Acc, Acc).
 q_sort_slot_len([H|T], Acc, Sorted):-
     pivot_slot_len(H, T, L1, L2),
-    q_sort_slot_len(L1, Acc, Sorted1),
-    q_sort_slot_len(L2, [H|Sorted1], Sorted).
+    q_sort_slot_len(L1, Acc, SortedLeft),
+    q_sort_slot_len(L2, [H|SortedLeft], Sorted).
 
 
 % ============================================================================ %
